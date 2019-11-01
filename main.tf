@@ -22,12 +22,12 @@ resource "aws_api_gateway_rest_api" "nmm_client_logging_common" {
 
 resource "aws_api_gateway_deployment" "nmm_client_logging_common" {
   depends_on = [
-    "aws_api_gateway_method.nmm_client_put_logs",
     "aws_api_gateway_integration.nmm_client_put_logs",
-    "aws_api_gateway_method.nmm_client_create_streams",
-    "aws_api_gateway_integration.nmm_client_create_streams"
+    "aws_api_gateway_integration.nmm_client_create_streams",
+    "aws_api_gateway_integration.nmm_client_put_logs_options",
+    "aws_api_gateway_integration.nmm_client_create_streams_options"
   ]
-  rest_api_id = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
 
   stage_name = ""
 }
@@ -36,7 +36,7 @@ resource "aws_api_gateway_deployment" "nmm_client_logging_common" {
 resource "aws_api_gateway_method_settings" "nmm_client_api_gateway_logging" {
   depends_on = ["aws_api_gateway_stage.nmm_client_api_gateway_logging"]
 
-  rest_api_id = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
   stage_name  = aws_api_gateway_stage.nmm_client_api_gateway_logging.stage_name
   method_path = "*/*"
 
@@ -65,23 +65,77 @@ resource "aws_cloudwatch_log_group" "nmm_client_api_gateway_logging" {
 # *-\/\/-* PARTICULAR RESOURCES *-\/\/-* #
 
 # --- CREATE STREAM RESOURCES --- #
+# OPTIONS
+resource "aws_api_gateway_method" "nmm_client_create_streams_options" {
+  rest_api_id   = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id   = aws_api_gateway_resource.nmm_client_create_streams.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "nmm_client_create_streams_options" {
+  rest_api_id             = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id             = aws_api_gateway_resource.nmm_client_create_streams.id
+  http_method             = aws_api_gateway_method.nmm_client_create_streams_options.http_method
+  type                    = "MOCK"
+  passthrough_behavior    = "WHEN_NO_TEMPLATES"
+
+  request_templates = {
+    "application/json" = <<EOF
+{
+  "statusCode": 200
+}
+EOF
+  }
+}
+
+resource "aws_api_gateway_integration_response" "nmm_client_create_streams_options" {
+  # FIX https://github.com/hashicorp/terraform/issues/7486#issuecomment-257091992
+  depends_on = [
+    "aws_api_gateway_integration.nmm_client_create_streams_options"
+  ]
+
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id = aws_api_gateway_resource.nmm_client_create_streams.id
+  http_method = aws_api_gateway_method.nmm_client_create_streams_options.http_method
+  status_code = aws_api_gateway_method_response.nmm_client_create_streams_options.status_code
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = var.allowed_origin
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Access-Control-Allow-Origin'"
+  }
+}
+
+resource "aws_api_gateway_method_response" "nmm_client_create_streams_options" {
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id = aws_api_gateway_resource.nmm_client_create_streams.id
+  http_method = aws_api_gateway_method.nmm_client_create_streams_options.http_method
+  status_code = "200"
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+  }
+}
+
+# POST
 resource "aws_api_gateway_resource" "nmm_client_create_streams" {
-  rest_api_id = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  parent_id   = "${aws_api_gateway_rest_api.nmm_client_logging_common.root_resource_id}"
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  parent_id   = aws_api_gateway_rest_api.nmm_client_logging_common.root_resource_id
   path_part   = "create-streams"
 }
 
 resource "aws_api_gateway_method" "nmm_client_create_streams" {
-  rest_api_id   = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  resource_id   = "${aws_api_gateway_resource.nmm_client_create_streams.id}"
+  rest_api_id   = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id   = aws_api_gateway_resource.nmm_client_create_streams.id
   http_method   = "POST"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_integration" "nmm_client_create_streams" {
-  rest_api_id             = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  resource_id             = "${aws_api_gateway_resource.nmm_client_create_streams.id}"
-  http_method             = "${aws_api_gateway_method.nmm_client_create_streams.http_method}"
+  rest_api_id             = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id             = aws_api_gateway_resource.nmm_client_create_streams.id
+  http_method             = aws_api_gateway_method.nmm_client_create_streams.http_method
   type                    = "AWS"
   uri                     = "arn:aws:apigateway:${var.region}:logs:action/CreateLogStream"
   integration_http_method = "POST"
@@ -99,7 +153,7 @@ EOF
   }
 }
 
-# --- RESPONSES --- #
+# --- POST RESPONSES --- #
 #  Successful
 resource "aws_api_gateway_integration_response" "successful_create_stream" {
   # N.B - Needed otherwise won't get green when applying
@@ -112,6 +166,10 @@ resource "aws_api_gateway_integration_response" "successful_create_stream" {
   status_code       = aws_api_gateway_method_response.successful_create_stream.status_code
   content_handling  = "CONVERT_TO_TEXT"
   selection_pattern = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = var.allowed_origin
+  }
 
   response_templates = {
     "application/json" = <<EOF
@@ -127,6 +185,10 @@ resource "aws_api_gateway_method_response" "successful_create_stream" {
   resource_id = "${aws_api_gateway_resource.nmm_client_create_streams.id}"
   http_method = "${aws_api_gateway_method.nmm_client_create_streams.http_method}"
   status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
 }
 
 # Unsuccessful
@@ -142,6 +204,10 @@ resource "aws_api_gateway_integration_response" "unsuccessful_create_stream" {
   content_handling  = "CONVERT_TO_TEXT"
   selection_pattern = "400"
 
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = var.allowed_origin
+  }
+
   response_templates = {
     "application/json" = <<EOF
 {
@@ -156,10 +222,14 @@ EOF
 }
 
 resource "aws_api_gateway_method_response" "unsuccessful_create_stream" {
-  rest_api_id = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  resource_id = "${aws_api_gateway_resource.nmm_client_create_streams.id}"
-  http_method = "${aws_api_gateway_method.nmm_client_create_streams.http_method}"
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id = aws_api_gateway_resource.nmm_client_create_streams.id
+  http_method = aws_api_gateway_method.nmm_client_create_streams.http_method
   status_code = "400"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
 }
 
 # --- CREATE STREAM ENDPOINT CREDENTIALS --- #
@@ -214,23 +284,77 @@ data "aws_iam_policy_document" "nmm_client_create_streams" {
 
 
 # --- PUTS LOGGING ENDPOINT --- #
+# OPTIONS
+resource "aws_api_gateway_method" "nmm_client_put_logs_options" {
+  rest_api_id   = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id   = aws_api_gateway_resource.nmm_client_put_logs.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "nmm_client_put_logs_options" {
+  rest_api_id             = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id             = aws_api_gateway_resource.nmm_client_put_logs.id
+  http_method             = aws_api_gateway_method.nmm_client_put_logs_options.http_method
+  type                    = "MOCK"
+  passthrough_behavior    = "WHEN_NO_TEMPLATES"
+
+  request_templates = {
+    "application/json" = <<EOF
+{
+  "statusCode": 200
+}
+EOF
+  }
+}
+
+resource "aws_api_gateway_method_response" "nmm_client_put_logs_options" {
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id = aws_api_gateway_resource.nmm_client_put_logs.id
+  http_method = aws_api_gateway_method.nmm_client_put_logs_options.http_method
+  status_code = "200"
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "nmm_client_put_logs_options" {
+  # FIX https://github.com/hashicorp/terraform/issues/7486#issuecomment-257091992
+  depends_on = [
+    "aws_api_gateway_integration.nmm_client_put_logs_options"
+  ]
+
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id = aws_api_gateway_resource.nmm_client_put_logs.id
+  http_method = aws_api_gateway_method.nmm_client_put_logs_options.http_method
+  status_code = aws_api_gateway_method_response.nmm_client_put_logs_options.status_code
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = var.allowed_origin
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Access-Control-Allow-Origin'"
+  }
+}
+
+# POST
 resource "aws_api_gateway_resource" "nmm_client_put_logs" {
-  rest_api_id = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  parent_id   = "${aws_api_gateway_rest_api.nmm_client_logging_common.root_resource_id}"
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  parent_id   = aws_api_gateway_rest_api.nmm_client_logging_common.root_resource_id
   path_part   = "put-logs"
 }
 
 resource "aws_api_gateway_method" "nmm_client_put_logs" {
-  rest_api_id   = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  resource_id   = "${aws_api_gateway_resource.nmm_client_put_logs.id}"
+  rest_api_id   = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id   = aws_api_gateway_resource.nmm_client_put_logs.id
   http_method   = "POST"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_integration" "nmm_client_put_logs" {
-  rest_api_id             = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  resource_id             = "${aws_api_gateway_resource.nmm_client_put_logs.id}"
-  http_method             = "${aws_api_gateway_method.nmm_client_put_logs.http_method}"
+  rest_api_id             = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id             = aws_api_gateway_resource.nmm_client_put_logs.id
+  http_method             = aws_api_gateway_method.nmm_client_put_logs.http_method
   type                    = "AWS"
   uri                     = "arn:aws:apigateway:${var.region}:logs:action/PutLogEvents"
   integration_http_method = "POST"
@@ -273,6 +397,10 @@ resource "aws_api_gateway_integration_response" "successful_put_logs" {
   content_handling  = "CONVERT_TO_TEXT"
   selection_pattern = "200"
 
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = var.allowed_origin
+  }
+
   response_templates = {
     "application/json" = <<EOF
 {
@@ -283,10 +411,14 @@ EOF
 }
 
 resource "aws_api_gateway_method_response" "successful_put_logs" {
-  rest_api_id = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  resource_id = "${aws_api_gateway_resource.nmm_client_put_logs.id}"
-  http_method = "${aws_api_gateway_method.nmm_client_put_logs.http_method}"
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id = aws_api_gateway_resource.nmm_client_put_logs.id
+  http_method = aws_api_gateway_method.nmm_client_put_logs.http_method
   status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
 }
 
 # Unsuccessful
@@ -302,13 +434,19 @@ resource "aws_api_gateway_integration_response" "unsuccessful_put_logs" {
   content_handling  = "CONVERT_TO_TEXT"
   selection_pattern = "400"
 
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = var.allowed_origin
+  }
+
   response_templates = {
     "application/json" = <<EOF
 {
   #if($inputRoot.message.length() != 0)
-    "error": "$input.path('$.message')"
+    "error": "$input.path('$.message')",
+    "expectedSequenceToken": "$input.path('$.expectedSequenceToken')"
   #else
-    "error": "$input.path('$.Message')"
+    "error": "$input.path('$.Message')",
+    "expectedSequenceToken": "$input.path('$.expectedSequenceToken')"
   #end
 }
 EOF
@@ -316,10 +454,14 @@ EOF
 }
 
 resource "aws_api_gateway_method_response" "unsuccessful_put_logs" {
-  rest_api_id = "${aws_api_gateway_rest_api.nmm_client_logging_common.id}"
-  resource_id = "${aws_api_gateway_resource.nmm_client_put_logs.id}"
-  http_method = "${aws_api_gateway_method.nmm_client_put_logs.http_method}"
+  rest_api_id = aws_api_gateway_rest_api.nmm_client_logging_common.id
+  resource_id = aws_api_gateway_resource.nmm_client_put_logs.id
+  http_method = aws_api_gateway_method.nmm_client_put_logs.http_method
   status_code = "400"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
 }
 
 # --- PUTS LOGGING ENDPOINT CREDENTIALS --- #
