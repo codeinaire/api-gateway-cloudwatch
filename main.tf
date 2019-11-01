@@ -100,9 +100,9 @@ resource "aws_api_gateway_integration_response" "nmm_client_create_streams_optio
   http_method = aws_api_gateway_method.nmm_client_create_streams_options.http_method
   status_code = aws_api_gateway_method_response.nmm_client_create_streams_options.status_code
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Methods" = var.allowed_methods
     "method.response.header.Access-Control-Allow-Origin"  = var.allowed_origin
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Access-Control-Allow-Origin'"
+    "method.response.header.Access-Control-Allow-Headers" = var.allowed_headers
   }
 }
 
@@ -331,9 +331,9 @@ resource "aws_api_gateway_integration_response" "nmm_client_put_logs_options" {
   http_method = aws_api_gateway_method.nmm_client_put_logs_options.http_method
   status_code = aws_api_gateway_method_response.nmm_client_put_logs_options.status_code
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Methods" = var.allowed_methods
     "method.response.header.Access-Control-Allow-Origin"  = var.allowed_origin
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Access-Control-Allow-Origin'"
+    "method.response.header.Access-Control-Allow-Headers" = var.allowed_headers
   }
 }
 
